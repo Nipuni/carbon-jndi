@@ -35,6 +35,6 @@ public class JNDIContextManagerServiceFactory implements ServiceFactory<JNDICont
     @Override
     public void ungetService(Bundle bundle, ServiceRegistration<JNDIContextManager> serviceRegistration,
                              JNDIContextManager jndiContextManager) {
-
+        ((JNDIContextManagerImpl)jndiContextManager).close();
     }
 }

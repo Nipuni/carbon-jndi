@@ -22,21 +22,21 @@ import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.jndi.JNDIContextManager;
 
-import java.util.Collection;
-import java.util.Hashtable;
-import java.util.Map;
-import java.util.Optional;
-
 import javax.naming.Context;
 import javax.naming.NamingException;
 import javax.naming.NoInitialContextException;
 import javax.naming.directory.DirContext;
 import javax.naming.spi.InitialContextFactory;
 import javax.naming.spi.InitialContextFactoryBuilder;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
-import static org.wso2.carbon.jndi.internal.util.JNDIUtils.getInitialContextFromBuilder;
-import static org.wso2.carbon.jndi.internal.util.JNDIUtils.getInitialContextFromFactory;
-import static org.wso2.carbon.jndi.internal.util.JNDIUtils.getServiceReferences;
+import static org.wso2.carbon.jndi.internal.util.JNDIUtils.*;
 
 /**
  * This class provides an implementation of JNDIContextManager interface.
@@ -44,6 +44,7 @@ import static org.wso2.carbon.jndi.internal.util.JNDIUtils.getServiceReferences;
 public class JNDIContextManagerImpl implements JNDIContextManager {
 
     private static final String OBJECT_CLASS = "objectClass";
+    private Set<Context> contexts = Collections.synchronizedSet(new HashSet<>());
 
     private BundleContext bundleContext;
 //    private ServiceRegistration<JNDIContextManager> serviceRegistration;
@@ -104,6 +105,8 @@ public class JNDIContextManagerImpl implements JNDIContextManager {
             initialContextOptional = getInitialContextFromFactory(bundleContext,
                     factorySRefCollection, environment);
             if (initialContextOptional.isPresent()) {
+                //add not null initialContext to a synchronized set
+                contexts.add(initialContextOptional.get());
                 return initialContextOptional;
             }
 
@@ -118,6 +121,8 @@ public class JNDIContextManagerImpl implements JNDIContextManager {
             initialContextOptional.orElseThrow(() -> new NoInitialContextException(
                     "Cannot find the InitialContextFactory " + userDefinedICFClassName + "."));
 
+            //add not null initialContext to a synchronized set
+            contexts.add(initialContextOptional.get());
             //5) Returning the initialContext which is not null.
             return initialContextOptional;
 
@@ -130,6 +135,8 @@ public class JNDIContextManagerImpl implements JNDIContextManager {
                     builderSRefCollection, environment);
 
             if (initialContextOptional.isPresent()) {
+                //add not null initialContext to a synchronized set
+                contexts.add(initialContextOptional.get());
                 return initialContextOptional;
             }
 
@@ -140,6 +147,8 @@ public class JNDIContextManagerImpl implements JNDIContextManager {
             initialContextOptional = getInitialContextFromFactory(bundleContext,
                     factorySRefCollection, environment);
 
+            //add not null initialContext to a synchronized set
+            contexts.add(initialContextOptional.get());
             //4) If no Context has been found, an initial Context is returned without any backing. This returned initial
             //  Context can then only be used to perform URL based lookups.
             return initialContextOptional;
@@ -163,5 +172,22 @@ public class JNDIContextManagerImpl implements JNDIContextManager {
                 "(" + OBJECT_CLASS + "=" + userDefinedICFClassName + ")" +
                 "(" + OBJECT_CLASS + "=" + InitialContextFactory.class.getName() + ")" +
                 ")";
+    }
+
+    /**
+     * Calling close() will release the resources held by the JNDI Implementation on the client's behalf
+     * for that Context.
+     */
+    public void close() {
+        synchronized (contexts) {
+            for (Context context : contexts) {
+                try {
+                    context.close();
+                } catch (NamingException e) {
+                    // ignore
+                }
+            }
+            contexts.clear();
+        }
     }
 }
